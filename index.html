@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="PCTs"/>
+<meta name="theme-color" content="#3E2723"/>
+<title>PCTs – Pacotes de Açúcar</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCqpGPmwa0DpL1WCq1PILoyjmlgARETxhs",
+  authDomain: "pcts-f96c5.firebaseapp.com",
+  projectId: "pcts-f96c5",
+  storageBucket: "pcts-f96c5.firebasestorage.app",
+  messagingSenderId: "176476022238",
+  appId: "1:176476022238:web:029d0e38c1666cd8b7e94f"
+};
+
+const app = initializeApp(firebaseConfig);
+const db  = getFirestore(app);
+
+// Expose Firebase methods globally so the React app can use them
+window._firebase = {
+  col: () => collection(db, "packets"),
+  add: (data) => addDoc(collection(db, "packets"), data),
+  upd: (id, data) => updateDoc(doc(db, "packets", id), data),
+  del: (id) => deleteDoc(doc(db, "packets", id)),
+  onSnapshot,
+};
+window._firebaseReady = true;
+window.dispatchEvent(new Event("firebaseReady"));
+</script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+body{background:#FAFAF8;font-family:Georgia,serif;overscroll-behavior:none;}
+input,select,textarea,button{font-family:inherit;font-size:15px;}
+select{-webkit-appearance:auto;}
+.card:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.13);}
+.row:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.1);}
+#loading{position:fixed;inset:0;background:#3E2723;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;gap:16px;z-index:9999;}
+#loading .spin{width:44px;height:44px;border:4px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+<div id="loading">
+  <div style="font-size:44px">🍬</div>
+  <div class="spin"></div>
+  <div style="font-size:14px;opacity:.7">A ligar à base de dados…</div>
+</div>
+<div id="root"></div>
+
+<script>
+const {createElement:h, useState, useRef, useEffect, Fragment} = React;
+
+// ── DATA ─────────────────────────────────────────────────────────────────────
+const GRUPOS={
+  "Séries":       {group:"A",color:"#E65100",light:"#FFF3E0"},
+  "Individuais":  {group:"A",color:"#BF360C",light:"#FBE9E7"},
+  "Adoçantes":    {group:"A",color:"#6A1B9A",light:"#F3E5F5"},
+  "Comp. Aéreas": {group:"B",color:"#0D47A1",light:"#E3F2FD"},
+  "Mc Donalds":   {group:"B",color:"#E65100",light:"#FFF8E1"},
+  "Hotéis":       {group:"B",color:"#1B5E20",light:"#E8F5E9"},
+};
+const SUBCATS={
+  "Séries":      ["Marca de Café","Embaladora","PortSugar","Encontros","Numeradas","Import/Export"],
+  "Individuais": ["Marca de Café","Embaladora","PortSugar","Encontros","Import/Export"],
+  "Adoçantes":   ["Marca de Café","Embaladora","PortSugar","Encontros","Import/Export"],
+  "Hotéis":      ["Marca de Café","Embaladora","Import/Export"],
+  "Comp. Aéreas":[],
+  "Mc Donalds":  [],
+};
+const GENEROS=["Pacote","Stick","Envelope","Outro"];
+const EIXOS=["Invertido","Normal","Outro"];
+const FECHOS=["Picotado","Estriado","Colado","Outro"];
+const ICONS={"Séries":"📚","Individuais":"🏷️","Adoçantes":"🟣","Comp. Aéreas":"✈️","Mc Donalds":"🍟","Hotéis":"🏨"};
+const SUBCAT_COLORS={"Marca de Café":"#C62828","Embaladora":"#1565C0","PortSugar":"#6A1B9A","Encontros":"#00695C","Numeradas":"#E65100","Import/Export":"#2E7D32"};
+
+const EMBALADORAS=["","A CASTRO GANDRA E GANDRA, LDA.","A MARTINS E MARTINS","AC - EMBALADORA DE GÉNEROS ALIMENTÍCIOS","AÇUESTE","AÇUNORTE - EMBAL. DE AÇÚCAR E CAFÉS, LDA.","ALCANTARA - REFINARIAS DE AÇÚCARES","ARMAZÉNS RIBATEJO","ARMAZÉNS RODRIGUES (IRMÃOS) E COMP., SARL","C. EMÍLIO GOMES PAIS","C. EMÍLIO PAIS","COANCIPA","CONFEITARIA CENTRAL","DIDIER E QUEIRÓZ","DISFALA","EAL","EMILIO PAIS E FILHO, LDA.","EMPACOTAL","EURO SUCRE","EURO-AÇÚCAR","FÁBRICA ÁGUIA","FÁBRICA DE EMPACOTAMENTO AUTOMÁTICO DE COIMBRA DE HEITOR DA COSTA","FÁBRICA DE SANTA CLARA","GUIMARÃES CARDOSO E COMP., LDA","HINTON","ISLENA","J. H. ORNELAS & COMP. SUC., LDA","J. SALLES CALDEIRA, LDA.","JOSÉ DA SILVA GAMA, & CA. LDA.","JOSÉ HENRIQUES & CIA., LDA.","LUSITECA","PERFEITO LN. SILVA","PINGUINHA DOS SANTOS E ALVES, LDA.","PRODUTOS ALIMENTARES JACARANDÁ, LDA.","RAR - REFINARIAS DE AÇÚCAR REUNIDAS","REFINARIA ANGOLA","REFINARIA DO INTENDENTE","REFINARIA DO ULTRAMAR","S. D. PACK - EMBALAGENS, LDA.","SABE - SEVERIM JOSÉ DE BRITO E COMP. LDA.","SEMPA","SIDUL - SOC. IND. DO ULTRAMAR","SIMÕES E FILHOS","SINAGA","SOCIEDADE COMERCIAL SAS, LDA.","SOINCAL","SOLNAVE","SORES","SUGAPACK","TEMPAL","TOMO","TRÊZCAMPOS","VILARINHO E SOBRINHO, LDA.","VILLARINHO E RICARDO, SARL.","S/ REGISTO DE EMBALADORA"];
+
+const MARCAS_CAFE=["","A Baiana","A Brasileira (do Chiado)","A Brasileira (do Porto)","A Caboverdiana","A Caféeira","A Luisinha","Acioli","Ádria","Alexandro Nannini","Amboim","Atlas","Azkoyen","Bairrada","Barco","Becca","Beira Douro","Belem","Bellissimo","Beluno","Berano","Beroni","Bicafé","Bogani","Boltini","Brazilian","Breda","Brenzo","Bricelta","Bronzo","Brunati","Buondi","Cafa","Café da Cidade","Café de Colômbia","Café do Brasil","Café do Ponto","Café e Creme","Café Puro","Cafecel","Cafés de Cabo Verde","Cafeteira de Ouro","Caffélder","Camelo","Campinas de S. Paulo","Camponesa","Candelas","Cannelli","Capital","Capuchinos","Caravela","Carioca","Casa do Corvo","Casa dos Cafés Rio","Casa Macário","Casa Moka","Central Fornecedora de Cafés","Cevada VS","Chave D'Ouro","Christina","Cini","Colombo","Colonial","Combate","Condor","Continental","Corsini","Crispa's","Cubano","Danesi","De roccis","Delícia","Delícia Negra","Delta","Diamante Negro","Dom Basto","Domus","Dourado","Ducafé","Euromica","Fama de América","Fazenda","FEB","Ferraz","Ferreira, seleccionados","Flor da Selva","Flor do Minho","Gama","Gespresso","Gitana","Globo do Brasil","Gometero","Grão a Dois","Grão de Ouro","Grão Velho","Grãos d'África","Guglielmo","Herédia","Horeb","i Sabor","IC (Irmãos Cordeiro)","Il caffe di roma","Illy","Império","Inca","Indy","Intenso","Ionia","Ipac","Jamaica","Janine","Javanesa","Jede","JMB","Jotey","Kaffa","Kibueno","Kilatyno","La Gamma","Latino","Latylo","Lavazza","Leão","Lobito","Lotus","Lucaffe","Lufertel","Lunni","Lusitana","Luso-brasileiro","Mabuba","Magnólia","Mambo","Manutenção Militar","Marino","Mario Marques","Marir","Meirelles","Meltino","Milita","Millenium","Minho","Minhotinha","Moca","Mocay","Moinhos de S. Bento","Molinari","Montarroio","Moura","Musetti","Nabeiro","Nandi","Natural","Negrita","Nescafe","Nespresso","Nicali","Nicola","Nilo","Novell","Novo Dia","Novokafé","Nutricafés","O Sagres","O Templo do Café","Origem","Ouro Negro","Palheta do Brasil","Palmeira","Paraíso do Liz","Pernambucana","Pérola d'Ouro","Pérola de Chaimite","Pérola do Atlântico","Pérola do Rossio","Pérola Negra","Piazza","Polanca","Portela","Portioli","Quatro","Quetal","Real Cafés","Ritazza","Romano","Rosa Negra","Saicaf","Santa Iria","Santa Maria","Santó","Santos Bichos","Sanzala","Scorpio","Segafredo","Segredos do Moinho","Sical","Silveira","Sotocal","Star Coffee","Storia del Café","Tangue","TC3","Templo","Tenco","Tofa","Tonino Lamborguini","Tony","Torrefacção Bracarense","Torrefacção Cubana","Torrefacção do Mondego (tomo)","Torrefacção Lusitana","Torrié","Total","Tropical","Tropicoffee","Tuela","Valena","Valentino","Vereda","Zalli","Zulu"];
+
+// ── HELPERS ──────────────────────────────────────────────────────────────────
+function subcatsFor(t){return SUBCATS[t]||[];}
+function makeId(tipo,seq,ma){
+  const p={"Séries":"S","Individuais":"I","Adoçantes":"A","Comp. Aéreas":"CA","Mc Donalds":"MC","Hotéis":"HT"}[tipo]||"X";
+  return p+String(seq).padStart(3,"0")+"_"+(ma||"0124");
+}
+function emptyForm(tipo,subcat){
+  return {id:"",tipo:tipo||"Séries",subcat:subcat||(subcatsFor(tipo||"Séries")[0]||""),nome:"",marcaCafe:"",embaladora:"",impressor:"",nrPacotes:"",dimensoes:"80mm x 40mm",peso:"",genero:"Pacote",eixo:"Invertido",fecho:"Picotado",imagemFrente:null,imagemVerso:null,pais:""};
+}
+
+// ── STYLES ───────────────────────────────────────────────────────────────────
+const S={
+  app:{minHeight:"100vh",background:"#FAFAF8"},
+  header:{background:"linear-gradient(135deg,#4E342E,#3E2723)",color:"#fff",padding:"0 16px",boxShadow:"0 3px 16px rgba(62,39,35,.4)",position:"sticky",top:0,zIndex:100},
+  headerInner:{maxWidth:900,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 0",gap:8,flexWrap:"wrap"},
+  brand:{display:"flex",alignItems:"center",gap:10,cursor:"pointer"},
+  brandTitle:{fontSize:22,fontWeight:"bold"},
+  brandSub:{fontSize:10,opacity:.65,letterSpacing:2,textTransform:"uppercase",marginTop:1},
+  hStats:{display:"flex",gap:10,flexWrap:"wrap"},
+  hStat:{textAlign:"center",cursor:"pointer",minWidth:40},
+  hStatVal:{fontSize:17,fontWeight:"bold",lineHeight:1},
+  hStatLbl:{fontSize:9,opacity:.6,letterSpacing:1,textTransform:"uppercase"},
+  bc:{maxWidth:900,margin:"0 auto",padding:"5px 0 7px",fontSize:12,display:"flex",alignItems:"center",gap:4,flexWrap:"wrap",opacity:.85},
+  bcLink:{cursor:"pointer",textDecoration:"underline",color:"#FFCC80"},
+  bcSep:{color:"#FFCC80",opacity:.5},
+  bcCur:{color:"#FFF9C4",fontWeight:"bold"},
+  main:{maxWidth:900,margin:"0 auto",padding:"20px 14px 80px"},
+  secTitle:{fontSize:11,letterSpacing:3,textTransform:"uppercase",color:"#8D6E63",marginBottom:12,fontWeight:600},
+  grpLabel:{display:"flex",alignItems:"center",gap:7,fontSize:12,color:"#5D4037",fontWeight:600,marginBottom:10},
+  grpDot:{width:9,height:9,borderRadius:"50%",display:"inline-block"},
+  tipoGrid:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:10,marginBottom:14},
+  tipoCard:{padding:"16px 14px",borderRadius:12,cursor:"pointer",boxShadow:"0 2px 10px rgba(0,0,0,.07)",position:"relative",transition:"transform .15s,box-shadow .15s"},
+  subcatGrid:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:10},
+  subcatCard:{background:"#fff",padding:"14px 16px",borderRadius:10,cursor:"pointer",boxShadow:"0 2px 8px rgba(0,0,0,.07)",display:"flex",alignItems:"center",justifyContent:"space-between",transition:"transform .15s"},
+  pageTitle:{fontSize:20,fontWeight:"bold",color:"#3E2723",marginBottom:3},
+  listCount:{fontSize:12,color:"#999",marginBottom:14},
+  listHeader:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10,marginBottom:14},
+  searchWrap:{position:"relative",flex:"1 1 160px"},
+  searchIn:{width:"100%",padding:"9px 28px 9px 28px",border:"2px solid #D7CCC8",borderRadius:8,fontSize:14,background:"#fff",outline:"none",fontFamily:"inherit"},
+  clearX:{position:"absolute",right:7,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:13,color:"#999"},
+  addBtn:{padding:"10px 16px",background:"linear-gradient(135deg,#8D6E63,#4E342E)",color:"#fff",border:"none",borderRadius:8,fontSize:13,cursor:"pointer",fontWeight:"bold",whiteSpace:"nowrap",boxShadow:"0 2px 8px rgba(78,52,46,.3)"},
+  listGrid:{display:"flex",flexDirection:"column",gap:8},
+  row:{background:"#fff",borderRadius:10,boxShadow:"0 2px 8px rgba(0,0,0,.07)",display:"flex",alignItems:"center",gap:12,padding:"10px 14px",cursor:"pointer",transition:"transform .12s,box-shadow .12s"},
+  rowThumb:{width:50,height:50,borderRadius:8,overflow:"hidden",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"},
+  rowThumbImg:{width:"100%",height:"100%",objectFit:"cover"},
+  rowBody:{flex:1,minWidth:0},
+  rowId:{fontSize:10,color:"#BCAAA4",letterSpacing:.8,fontFamily:"monospace"},
+  rowName:{fontSize:14,fontWeight:"bold",color:"#3E2723",marginBottom:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},
+  rowMeta:{display:"flex",gap:4,flexWrap:"wrap"},
+  rowRight:{textAlign:"right",flexShrink:0},
+  empty:{textAlign:"center",padding:"50px 16px",color:"#a0856e",display:"flex",flexDirection:"column",alignItems:"center",gap:12},
+  detailWrap:{display:"flex",gap:20,flexWrap:"wrap"},
+  detailImgPanel:{width:"100%",maxWidth:320},
+  detailImgBox:{width:"100%",aspectRatio:"4/3",borderRadius:12,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 16px rgba(0,0,0,.15)"},
+  detailImgEl:{width:"100%",height:"100%",objectFit:"contain"},
+  imgToggle:{display:"flex",gap:8,marginTop:8},
+  imgTogBtn:{flex:1,padding:"9px 0",border:"2px solid #D7CCC8",borderRadius:8,fontSize:13,cursor:"pointer",background:"#fff",fontWeight:600},
+  detailInfo:{flex:1,minWidth:240},
+  detailBadge:{display:"inline-block",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700,letterSpacing:.4,marginBottom:8},
+  detailId:{fontSize:12,fontFamily:"monospace",color:"#BCAAA4",marginBottom:3},
+  detailNome:{fontSize:22,fontWeight:"bold",color:"#3E2723",marginBottom:14},
+  fieldsGrid:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8},
+  fieldItem:{background:"#FFF8F5",borderRadius:8,padding:"7px 10px"},
+  fieldKey:{fontSize:9,textTransform:"uppercase",letterSpacing:1,color:"#BCAAA4",marginBottom:1},
+  fieldVal:{fontSize:13,color:"#4E342E",fontWeight:600,wordBreak:"break-word"},
+  detailActions:{display:"flex",gap:8,marginTop:18,flexWrap:"wrap",alignItems:"center"},
+  editBtn:{padding:"10px 18px",background:"#EFEBE9",color:"#5D4037",border:"none",borderRadius:8,fontSize:13,cursor:"pointer",fontWeight:600},
+  delBtn:{padding:"10px 18px",background:"#FFEBEE",color:"#c0392b",border:"none",borderRadius:8,fontSize:13,cursor:"pointer",fontWeight:600},
+  delBtnOk:{padding:"8px 14px",background:"#c0392b",color:"#fff",border:"none",borderRadius:7,fontSize:13,cursor:"pointer"},
+  cancelSmall:{padding:"8px 12px",background:"#eee",color:"#666",border:"none",borderRadius:7,fontSize:12,cursor:"pointer"},
+  formWrap:{maxWidth:660,margin:"0 auto"},
+  formCard:{background:"#fff",borderRadius:14,boxShadow:"0 4px 20px rgba(78,52,46,.12)",padding:"20px 18px"},
+  formTitle:{fontSize:18,color:"#3E2723",margin:"0 0 16px",fontFamily:"Georgia,serif"},
+  formSec:{marginBottom:18},
+  formSecTitle:{fontSize:10,textTransform:"uppercase",letterSpacing:2,color:"#BCAAA4",fontWeight:700,marginBottom:8,borderBottom:"1px solid #F5F5F5",paddingBottom:5},
+  formRow2:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 14px"},
+  formRow3:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"10px 10px"},
+  formLabel:{display:"block",fontSize:10,textTransform:"uppercase",letterSpacing:.8,color:"#8D6E63",marginBottom:4,fontWeight:600},
+  inp:{width:"100%",padding:"10px",border:"2px solid #EDE7E3",borderRadius:7,fontSize:15,background:"#FFFAF0",boxSizing:"border-box",outline:"none",color:"#3E2723"},
+  rmImg:{background:"none",border:"none",color:"#c0392b",fontSize:12,cursor:"pointer",marginTop:4,padding:0},
+  formActions:{display:"flex",gap:10,justifyContent:"flex-end",marginTop:18},
+  cancelBtn:{padding:"11px 20px",background:"#EFEBE9",color:"#5D4037",border:"none",borderRadius:8,fontSize:14,cursor:"pointer",fontWeight:600},
+  saveBtn:{padding:"11px 22px",background:"linear-gradient(135deg,#8D6E63,#4E342E)",color:"#fff",border:"none",borderRadius:8,fontSize:14,cursor:"pointer",fontWeight:"bold",boxShadow:"0 2px 8px rgba(78,52,46,.3)"},
+  toast:{position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",background:"#3E2723",color:"#fff",padding:"11px 24px",borderRadius:30,fontSize:13,boxShadow:"0 4px 16px rgba(0,0,0,.25)",zIndex:999,pointerEvents:"none",whiteSpace:"nowrap"},
+  saving:{position:"fixed",top:12,right:14,background:"rgba(62,39,35,.85)",color:"#fff",padding:"6px 14px",borderRadius:20,fontSize:12,zIndex:999,pointerEvents:"none"},
+};
+
+// ── SMALL COMPONENTS ─────────────────────────────────────────────────────────
+function Tag({c,bg,children}){
+  return h("span",{style:{fontSize:10,color:c,background:bg,borderRadius:20,padding:"2px 7px",fontWeight:600}},children);
+}
+function FL({label,children}){
+  return h("div",null,h("label",{style:S.formLabel},label),children);
+}
+function ComboSelect({value,onChange,options,placeholder}){
+  const [custom,setCustom]=useState(false);
+  const known=options.includes(value)||value==="";
+  if(custom||(!known&&value!=="")){
+    return h("div",{style:{display:"flex",gap:6}},
+      h("input",{style:{...S.inp,flex:1},value,onChange:e=>onChange(e.target.value),placeholder}),
+      h("button",{style:S.cancelSmall,onClick:()=>{onChange("");setCustom(false);}},"\u2715")
+    );
+  }
+  return h("select",{style:S.inp,value,onChange:e=>e.target.value==="__outro__"?setCustom(true):onChange(e.target.value)},
+    options.map(o=>h("option",{key:o,value:o},o||("— "+placeholder+" —"))),
+    h("option",{value:"__outro__"},"Outra (escrever)…")
+  );
+}
+function ImgUpload({side,img,onChange,onRemove}){
+  const lbl=side==="frente"?"Frente":"Verso";
+  return h("div",{style:{display:"flex",flexDirection:"column",gap:6}},
+    img&&h("div",{style:{borderRadius:8,overflow:"hidden",border:"2px solid #D7CCC8",maxHeight:140}},
+      h("img",{src:img,alt:side,style:{width:"100%",objectFit:"contain",maxHeight:138,display:"block"}})
+    ),
+    h("label",{style:{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px 8px",background:"#FFF8F5",border:"2px dashed #BCAAA4",borderRadius:10,cursor:"pointer",fontSize:14,color:"#8D6E63",fontWeight:600,textAlign:"center"}},
+      h("span",{style:{fontSize:22}},"📷"),
+      img?`Substituir (${lbl})`:`Carregar (${lbl})`,
+      h("input",{type:"file",accept:"image/*",style:{display:"none"},onChange})
+    ),
+    img&&h("button",{style:S.rmImg,onClick:onRemove},"\u2715 Remover")
+  );
+}
+
+// ── FORM ─────────────────────────────────────────────────────────────────────
+function PacketForm({form,f,isEdit,onSave,onCancel,handleImage,saving}){
+  const subs=subcatsFor(form.tipo);
+  const groupA=GRUPOS[form.tipo]?.group==="A";
+  const isSeries=form.tipo==="Séries";
+  return h("div",{style:S.formWrap},
+    h("div",{style:S.formCard},
+      h("h2",{style:S.formTitle},isEdit?"Editar Pacote":"Novo Pacote"),
+      h("div",{style:S.formSec},
+        h("div",{style:S.formSecTitle},"Classificação"),
+        h("div",{style:S.formRow2},
+          h(FL,{label:"Tipo"},h("select",{style:S.inp,value:form.tipo,onChange:e=>f("tipo",e.target.value)},Object.keys(GRUPOS).map(t=>h("option",{key:t},t)))),
+          subs.length>0&&h(FL,{label:"Subcategoria"},h("select",{style:S.inp,value:form.subcat,onChange:e=>f("subcat",e.target.value)},subs.map(s=>h("option",{key:s},s))))
+        )
+      ),
+      h("div",{style:S.formSec},
+        h("div",{style:S.formSecTitle},"Identificação"),
+        h("div",{style:S.formRow2},
+          h(FL,{label:"ID *"},h("input",{style:S.inp,value:form.id,onChange:e=>f("id",e.target.value),placeholder:"ex: S001_0526"})),
+          h(FL,{label:"Nome"},h("input",{style:S.inp,value:form.nome,onChange:e=>f("nome",e.target.value),placeholder:"Nome do pacote"}))
+        )
+      ),
+      h("div",{style:S.formSec},
+        h("div",{style:S.formSecTitle},"Dados"),
+        h("div",{style:S.formRow2},
+          groupA&&h(FL,{label:"Marca de Café"},h(ComboSelect,{value:form.marcaCafe,onChange:v=>f("marcaCafe",v),options:MARCAS_CAFE,placeholder:"Selecionar marca"})),
+          !groupA&&h(FL,{label:"País"},h("input",{style:S.inp,value:form.pais,onChange:e=>f("pais",e.target.value),placeholder:"ex: Portugal"})),
+          h(FL,{label:"Embaladora"},h(ComboSelect,{value:form.embaladora,onChange:v=>f("embaladora",v),options:EMBALADORAS,placeholder:"Selecionar embaladora"})),
+          h(FL,{label:"Impressor"},h("input",{style:S.inp,value:form.impressor,onChange:e=>f("impressor",e.target.value),placeholder:"ex: emba"})),
+          isSeries&&h(FL,{label:"Nº Pacotes"},h("input",{style:S.inp,value:form.nrPacotes,onChange:e=>f("nrPacotes",e.target.value),placeholder:"ex: 3"})),
+          h(FL,{label:"Dimensões"},h("input",{style:S.inp,value:form.dimensoes,onChange:e=>f("dimensoes",e.target.value),placeholder:"80mm x 40mm"})),
+          !isSeries&&h(FL,{label:"Peso"},h("input",{style:S.inp,value:form.peso,onChange:e=>f("peso",e.target.value),placeholder:"ex: 7/8g"}))
+        )
+      ),
+      h("div",{style:S.formSec},
+        h("div",{style:S.formSecTitle},"Características Físicas"),
+        h("div",{style:S.formRow3},
+          h(FL,{label:"Género"},h("select",{style:S.inp,value:form.genero,onChange:e=>f("genero",e.target.value)},GENEROS.map(g=>h("option",{key:g},g)))),
+          h(FL,{label:"Eixo Rotação"},h("select",{style:S.inp,value:form.eixo,onChange:e=>f("eixo",e.target.value)},EIXOS.map(x=>h("option",{key:x},x)))),
+          h(FL,{label:"Fecho"},h("select",{style:S.inp,value:form.fecho,onChange:e=>f("fecho",e.target.value)},FECHOS.map(fc=>h("option",{key:fc},fc))))
+        )
+      ),
+      h("div",{style:S.formSec},
+        h("div",{style:S.formSecTitle},"Imagens"),
+        h("div",{style:S.formRow2},
+          h(FL,{label:"Imagem Frente"},h(ImgUpload,{side:"frente",img:form.imagemFrente,onChange:e=>handleImage("frente",e),onRemove:()=>f("imagemFrente",null)})),
+          h(FL,{label:"Imagem Verso"},h(ImgUpload,{side:"verso",img:form.imagemVerso,onChange:e=>handleImage("verso",e),onRemove:()=>f("imagemVerso",null)}))
+        )
+      ),
+      h("div",{style:S.formActions},
+        h("button",{style:S.cancelBtn,onClick:onCancel},"Cancelar"),
+        h("button",{style:{...S.saveBtn,opacity:saving?.9:1},onClick:onSave,disabled:saving},saving?"A guardar…":(isEdit?"💾 Guardar":"✚ Adicionar"))
+      )
+    )
+  );
+}
+
+// ── DETAIL ───────────────────────────────────────────────────────────────────
+function DetailView({packet,imageFlip,setImageFlip,onEdit,onDelete}){
+  const [confirmDel,setConfirmDel]=useState(false);
+  const color=GRUPOS[packet.tipo]?.color||"#555";
+  const light=GRUPOS[packet.tipo]?.light||"#eee";
+  const img=imageFlip==="frente"?packet.imagemFrente:packet.imagemVerso;
+  const fields=[
+    ["ID",packet.id],["Nome",packet.nome],
+    packet.marcaCafe&&["Marca de Café",packet.marcaCafe],
+    packet.pais&&["País",packet.pais],
+    packet.embaladora&&["Embaladora",packet.embaladora],
+    packet.impressor&&["Impressor",packet.impressor],
+    packet.nrPacotes&&["Nº Pacotes",packet.nrPacotes],
+    packet.dimensoes&&["Dimensões",packet.dimensoes],
+    packet.peso&&["Peso",packet.peso],
+    ["Género",packet.genero],["Eixo Rotação",packet.eixo],["Fecho",packet.fecho],
+  ].filter(Boolean);
+  return h("div",{style:S.detailWrap},
+    h("div",{style:S.detailImgPanel},
+      h("div",{style:{...S.detailImgBox,background:img?"#111":"#F5F5F5"}},
+        img?h("img",{src:img,alt:imageFlip,style:S.detailImgEl}):h("span",{style:{fontSize:56}},"🍬")
+      ),
+      h("div",{style:S.imgToggle},
+        h("button",{style:{...S.imgTogBtn,...(imageFlip==="frente"?{background:color,color:"#fff"}:{})},onClick:()=>setImageFlip("frente")},"Frente"),
+        h("button",{style:{...S.imgTogBtn,...(imageFlip==="verso"?{background:color,color:"#fff"}:{})},onClick:()=>setImageFlip("verso")},"Verso")
+      ),
+      h("div",{style:{textAlign:"center",marginTop:6,fontSize:11,color:"#aaa"}},
+        imageFlip==="frente"?(packet.imagemFrente?"✓ Imagem da frente":"Sem imagem de frente"):(packet.imagemVerso?"✓ Imagem do verso":"Sem imagem de verso")
+      )
+    ),
+    h("div",{style:S.detailInfo},
+      h("div",{style:{...S.detailBadge,background:light,color}},packet.tipo+(packet.subcat?" · "+packet.subcat:"")),
+      h("div",{style:S.detailId},packet.id),
+      h("div",{style:S.detailNome},packet.nome||h("em",{style:{color:"#ccc"}},"Sem nome")),
+      h("div",{style:S.fieldsGrid},fields.map(([k,v])=>v?h("div",{key:k,style:S.fieldItem},h("div",{style:S.fieldKey},k),h("div",{style:S.fieldVal},v)):null)),
+      h("div",{style:S.detailActions},
+        h("button",{style:S.editBtn,onClick:onEdit},"✏️ Editar"),
+        !confirmDel
+          ?h("button",{style:S.delBtn,onClick:()=>setConfirmDel(true)},"🗑 Eliminar")
+          :h("div",{style:{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}},
+              h("span",{style:{fontSize:12,color:"#c0392b"}},"Confirmar?"),
+              h("button",{style:S.delBtnOk,onClick:onDelete},"Sim"),
+              h("button",{style:S.cancelSmall,onClick:()=>setConfirmDel(false)},"Não")
+            )
+      )
+    )
+  );
+}
+
+// ── APP ──────────────────────────────────────────────────────────────────────
+function App(){
+  const [packets,setPackets]=useState([]);
+  const [ready,setReady]=useState(false);
+  const [view,setView]=useState("home");
+  const [activeTipo,setActiveTipo]=useState(null);
+  const [activeSubcat,setActiveSubcat]=useState(null);
+  const [selected,setSelected]=useState(null);
+  const [form,setForm]=useState(emptyForm());
+  const [editId,setEditId]=useState(null);
+  const [editFireId,setEditFireId]=useState(null);
+  const [search,setSearch]=useState("");
+  const [toast,setToast]=useState(null);
+  const [saving,setSaving]=useState(false);
+  const [imageFlip,setImageFlip]=useState("frente");
+  const nextSeq=useRef(1);
+
+  // Wait for Firebase module to load, then subscribe
+  useEffect(()=>{
+    function init(){
+      const fb=window._firebase;
+      const unsub=fb.onSnapshot(fb.col(),(snap)=>{
+        const docs=snap.docs.map(d=>({...d.data(),_fireId:d.id}));
+        setPackets(docs);
+        nextSeq.current=docs.length+10;
+        setReady(true);
+        document.getElementById("loading").style.display="none";
+      });
+      return unsub;
+    }
+    if(window._firebaseReady){
+      const unsub=init();
+      return ()=>unsub();
+    } else {
+      const handler=()=>{const unsub=init(); window._unsubPCTs=unsub;};
+      window.addEventListener("firebaseReady",handler);
+      return ()=>window.removeEventListener("firebaseReady",handler);
+    }
+  },[]);
+
+  const showToast=m=>{setToast(m);setTimeout(()=>setToast(null),2400);};
+  const goHome=()=>{setView("home");setActiveTipo(null);setActiveSubcat(null);};
+  const goTipo=tipo=>{
+    const subs=subcatsFor(tipo);
+    if(subs.length===0){setActiveTipo(tipo);setActiveSubcat("");setSearch("");setView("list");}
+    else{setActiveTipo(tipo);setActiveSubcat(null);setView("subcats");}
+  };
+  const goList=(tipo,sub)=>{setActiveTipo(tipo);setActiveSubcat(sub);setSearch("");setView("list");};
+  const goDetail=p=>{setSelected(p);setImageFlip("frente");setView("detail");};
+  const openAdd=()=>{
+    const ma=new Date().toISOString().slice(2,4)+String(new Date().getMonth()+1).padStart(2,"0");
+    const f=emptyForm(activeTipo,activeSubcat||subcatsFor(activeTipo)[0]||"");
+    f.id=makeId(activeTipo,nextSeq.current++,ma);
+    setForm(f);setEditId(null);setEditFireId(null);setView("form");
+  };
+  const openEdit=p=>{setForm({...p});setEditId(p.id);setEditFireId(p._fireId);setView("form");};
+  const ff=(k,v)=>setForm(fm=>({...fm,[k]:v}));
+  const handleImage=(side,e)=>{
+    const file=e.target.files[0];if(!file)return;
+    const r=new FileReader();
+    r.onload=ev=>setForm(f=>({...f,[side==="frente"?"imagemFrente":"imagemVerso"]:ev.target.result}));
+    r.readAsDataURL(file);
+  };
+
+  const saveForm=async()=>{
+    if(!form.id.trim()){showToast("O ID é obrigatório.");return;}
+    setSaving(true);
+    try{
+      const {_fireId,...data}=form;
+      if(editFireId){
+        await window._firebase.upd(editFireId,data);
+        showToast("✓ Pacote atualizado!");
+      } else {
+        await window._firebase.add(data);
+        showToast("✓ Pacote adicionado!");
+      }
+      setView(editFireId?"detail":"list");
+    } catch(e){
+      showToast("Erro ao guardar: "+e.message);
+    }
+    setSaving(false);
+  };
+
+  const deletePacket=async(fireId)=>{
+    try{
+      await window._firebase.del(fireId);
+      setView("list");
+      showToast("Pacote eliminado.");
+    } catch(e){
+      showToast("Erro ao eliminar: "+e.message);
+    }
+  };
+
+  // Keep selected in sync with live packets
+  useEffect(()=>{
+    if(selected){
+      const updated=packets.find(p=>p._fireId===selected._fireId);
+      if(updated)setSelected(updated);
+    }
+  },[packets]);
+
+  const listPackets=packets.filter(p=>
+    p.tipo===activeTipo&&(activeSubcat===""||p.subcat===activeSubcat)&&
+    (!search||[p.id,p.nome,p.marcaCafe||""].some(v=>(v||"").toLowerCase().includes(search.toLowerCase())))
+  );
+  const totalByCat=t=>packets.filter(p=>p.tipo===t).length;
+  const totalBySub=(t,s)=>packets.filter(p=>p.tipo===t&&p.subcat===s).length;
+
+  // ─ HEADER ─
+  const header=h("header",{style:S.header},
+    h("div",{style:S.headerInner},
+      h("div",{style:S.brand,onClick:goHome},
+        h("span",{style:{fontSize:28}},"🍬"),
+        h("div",null,h("div",{style:S.brandTitle},"PCTs"),h("div",{style:S.brandSub},"Pacotes de Açúcar"))
+      ),
+      h("div",{style:S.hStats},
+        ...Object.keys(GRUPOS).map(t=>h("div",{key:t,style:S.hStat,onClick:()=>goTipo(t)},
+          h("div",{style:{...S.hStatVal,color:GRUPOS[t].color}},totalByCat(t)),
+          h("div",{style:S.hStatLbl},t)
+        )),
+        h("div",{style:S.hStat},h("div",{style:{...S.hStatVal,color:"#5D4037"}},packets.length),h("div",{style:S.hStatLbl},"Total"))
+      )
+    ),
+    view!=="home"&&h("div",{style:S.bc},
+      h("span",{style:S.bcLink,onClick:goHome},"Início"),
+      activeTipo&&[h("span",{key:"s1",style:S.bcSep},"›"),h("span",{key:"s2",style:view==="subcats"?S.bcCur:S.bcLink,onClick:()=>setView("subcats")},activeTipo)],
+      activeSubcat&&[h("span",{key:"s3",style:S.bcSep},"›"),h("span",{key:"s4",style:view==="list"?S.bcCur:S.bcLink,onClick:()=>setView("list")},activeSubcat)],
+      view==="detail"&&selected&&[h("span",{key:"s5",style:S.bcSep},"›"),h("span",{key:"s6",style:S.bcCur},selected.id)],
+      view==="form"&&[h("span",{key:"s7",style:S.bcSep},"›"),h("span",{key:"s8",style:S.bcCur},editId?"Editar":"Novo")]
+    )
+  );
+
+  // ─ HOME ─
+  const homeView=h("div",null,
+    h("div",{style:S.secTitle},"Categorias"),
+    h("div",{style:S.grpLabel},h("span",{style:{...S.grpDot,background:"#E65100"}}),"Séries, Individuais & Adoçantes"),
+    h("div",{style:S.tipoGrid},["Séries","Individuais","Adoçantes"].map(t=>
+      h("div",{key:t,className:"card",style:{...S.tipoCard,borderTop:`4px solid ${GRUPOS[t].color}`,background:GRUPOS[t].light},onClick:()=>goTipo(t)},
+        h("div",{style:{fontSize:28,marginBottom:6}},ICONS[t]),
+        h("div",{style:{fontSize:14,fontWeight:"bold",color:GRUPOS[t].color,marginBottom:3}},t),
+        h("div",{style:{fontSize:12,color:"#888"}},totalByCat(t)+" pacote"+(totalByCat(t)!==1?"s":"")),
+        h("div",{style:{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",fontSize:18,fontWeight:"bold",color:GRUPOS[t].color}},"→")
+      )
+    )),
+    h("div",{style:{...S.grpLabel,marginTop:24}},h("span",{style:{...S.grpDot,background:"#0D47A1"}}),"Origens Especiais"),
+    h("div",{style:S.tipoGrid},["Comp. Aéreas","Mc Donalds","Hotéis"].map(t=>
+      h("div",{key:t,className:"card",style:{...S.tipoCard,borderTop:`4px solid ${GRUPOS[t].color}`,background:GRUPOS[t].light},onClick:()=>goTipo(t)},
+        h("div",{style:{fontSize:28,marginBottom:6}},ICONS[t]),
+        h("div",{style:{fontSize:14,fontWeight:"bold",color:GRUPOS[t].color,marginBottom:3}},t),
+        h("div",{style:{fontSize:12,color:"#888"}},totalByCat(t)+" pacote"+(totalByCat(t)!==1?"s":"")),
+        h("div",{style:{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",fontSize:18,fontWeight:"bold",color:GRUPOS[t].color}},"→")
+      )
+    ))
+  );
+
+  // ─ SUBCATS ─
+  const subcatView=activeTipo&&h("div",null,
+    h("div",{style:S.pageTitle},activeTipo),
+    h("div",{style:S.subcatGrid},subcatsFor(activeTipo).map(sub=>{
+      const color=SUBCAT_COLORS[sub]||"#555";
+      return h("div",{key:sub,className:"card",style:{...S.subcatCard,borderLeft:`5px solid ${color}`},onClick:()=>goList(activeTipo,sub)},
+        h("div",null,h("div",{style:{fontSize:14,fontWeight:"bold",color}},sub),h("div",{style:{fontSize:11,color:"#aaa",margin:"3px 0"}},totalBySub(activeTipo,sub)+" pacote"+(totalBySub(activeTipo,sub)!==1?"s":""))),
+        h("div",{style:{fontSize:16,fontWeight:"bold",color}},"→")
+      );
+    }))
+  );
+
+  // ─ LIST ─
+  const listView=h("div",null,
+    h("div",{style:S.listHeader},
+      h("div",null,
+        h("div",{style:S.pageTitle},activeTipo+(activeSubcat?" · "+activeSubcat:"")),
+        h("div",{style:S.listCount},listPackets.length+" pacote"+(listPackets.length!==1?"s":""))
+      ),
+      h("div",{style:{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}},
+        h("div",{style:S.searchWrap},
+          h("span",{style:{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",fontSize:12,opacity:.5}},"🔍"),
+          h("input",{style:S.searchIn,placeholder:"Pesquisar…",value:search,onChange:e=>setSearch(e.target.value)}),
+          search&&h("button",{style:S.clearX,onClick:()=>setSearch("")},"✕")
+        ),
+        h("button",{style:S.addBtn,onClick:openAdd},"+ Novo")
+      )
+    ),
+    listPackets.length===0&&h("div",{style:S.empty},h("div",{style:{fontSize:44}},"🫙"),h("div",null,"Nenhum pacote aqui ainda."),h("button",{style:S.addBtn,onClick:openAdd},"Adicionar o primeiro")),
+    h("div",{style:S.listGrid},listPackets.map(p=>{
+      const img=p.imagemFrente||p.imagemVerso;
+      const color=SUBCAT_COLORS[p.subcat]||"#888";
+      return h("div",{key:p._fireId||p.id,className:"row",style:S.row,onClick:()=>goDetail(p)},
+        h("div",{style:{...S.rowThumb,background:img?"#000":"#F5F5F5"}},img?h("img",{src:img,alt:"",style:S.rowThumbImg}):h("span",{style:{fontSize:22}},"🍬")),
+        h("div",{style:S.rowBody},
+          h("div",{style:S.rowId},p.id),
+          h("div",{style:S.rowName},p.nome||h("em",{style:{color:"#aaa"}},"Sem nome")),
+          h("div",{style:S.rowMeta},
+            p.marcaCafe&&h(Tag,{key:"mc",c:"#C62828",bg:"#FFEBEE"},p.marcaCafe),
+            p.pais&&h(Tag,{key:"pais",c:"#1565C0",bg:"#E3F2FD"},p.pais),
+            h(Tag,{key:"gen",c:color,bg:"#F5F5F5"},p.genero)
+          )
+        ),
+        h("div",{style:S.rowRight},
+          p.dimensoes&&h("div",{style:{fontSize:10,color:"#aaa"}},p.dimensoes),
+          p.nrPacotes&&h("div",{style:{fontSize:12,color:"#8D6E63",fontWeight:600}},"×"+p.nrPacotes),
+          p.peso&&h("div",{style:{fontSize:12,color:"#8D6E63",fontWeight:600}},p.peso)
+        )
+      );
+    }))
+  );
+
+  return h("div",{style:S.app},
+    header,
+    h("main",{style:S.main},
+      view==="home"&&homeView,
+      view==="subcats"&&subcatView,
+      view==="list"&&listView,
+      view==="detail"&&selected&&h(DetailView,{packet:selected,imageFlip,setImageFlip,onEdit:()=>openEdit(selected),onDelete:()=>deletePacket(selected._fireId)}),
+      view==="form"&&h(PacketForm,{form,f:ff,isEdit:!!editId,onSave:saveForm,onCancel:()=>setView(editId?"detail":"list"),handleImage,saving})
+    ),
+    saving&&h("div",{style:S.saving},"☁️ A guardar…"),
+    toast&&h("div",{style:S.toast},toast)
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(h(App));
+</script>
+</body>
+</html>
