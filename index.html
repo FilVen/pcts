@@ -390,8 +390,25 @@ function App(){
   const ff=(k,v)=>setForm(fm=>({...fm,[k]:v}));
   const handleImage=(side,e)=>{
     const file=e.target.files[0];if(!file)return;
+    const MAX_W=1200,MAX_H=1200,QUALITY=0.75;
     const r=new FileReader();
-    r.onload=ev=>setForm(f=>({...f,[side==="frente"?"imagemFrente":"imagemVerso"]:ev.target.result}));
+    r.onload=ev=>{
+      const img=new Image();
+      img.onload=()=>{
+        let w=img.width,h=img.height;
+        if(w>MAX_W||h>MAX_H){
+          const ratio=Math.min(MAX_W/w,MAX_H/h);
+          w=Math.round(w*ratio);h=Math.round(h*ratio);
+        }
+        const canvas=document.createElement("canvas");
+        canvas.width=w;canvas.height=h;
+        const ctx=canvas.getContext("2d");
+        ctx.drawImage(img,0,0,w,h);
+        const compressed=canvas.toDataURL("image/jpeg",QUALITY);
+        setForm(f=>({...f,[side==="frente"?"imagemFrente":"imagemVerso"]:compressed}));
+      };
+      img.src=ev.target.result;
+    };
     r.readAsDataURL(file);
   };
 
