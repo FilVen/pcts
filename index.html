@@ -100,7 +100,7 @@ function makeId(tipo,seq,ma){
   return p+String(seq).padStart(3,"0")+"_"+(ma||"0124");
 }
 function emptyForm(tipo,subcat){
-  return {id:"",tipo:tipo||"Séries",subcat:subcat||(subcatsFor(tipo||"Séries")[0]||""),nome:"",marcaCafe:"",embaladora:"",impressor:"",nrPacotes:"",dimensoes:"80mm x 40mm",peso:"",genero:"Pacote",eixo:"Invertido",fecho:"Picotado",imagemFrente:null,imagemVerso:null,pais:""};
+  return {id:"",tipo:tipo||"Séries",subcat:subcat||(subcatsFor(tipo||"Séries")[0]||""),nome:"",marcaCafe:"",embaladora:"",impressor:"",nrPacotes:"",dimensoes:"80mm x 40mm",peso:"",genero:"Pacote",eixo:"Invertido",fecho:"Picotado",imagemFrente:null,imagemVerso:null,pais:"",observacoes:""};
 }
 
 // ── STYLES ───────────────────────────────────────────────────────────────────
@@ -274,6 +274,12 @@ function PacketForm({form,f,isEdit,onSave,onCancel,handleImage,saving}){
           h(FL,{label:"Imagem Verso"},h(ImgUpload,{side:"verso",img:form.imagemVerso,onChange:e=>handleImage("verso",e),onRemove:()=>f("imagemVerso",null)}))
         )
       ),
+      h("div",{style:S.formSec},
+        h("div",{style:S.formSecTitle},"Observações"),
+        h(FL,{label:"Notas / Observações"},
+          h("textarea",{style:{...S.inp,height:90,resize:"vertical",lineHeight:1.5},value:form.observacoes||"",onChange:e=>f("observacoes",e.target.value),placeholder:"Observações, curiosidades, onde foi obtido…"})
+        )
+      ),
       h("div",{style:S.formActions},
         h("button",{style:S.cancelBtn,onClick:onCancel},"Cancelar"),
         h("button",{style:{...S.saveBtn,opacity:saving?.9:1},onClick:onSave,disabled:saving},saving?"A guardar…":(isEdit?"💾 Guardar":"✚ Adicionar"))
@@ -317,6 +323,10 @@ function DetailView({packet,imageFlip,setImageFlip,onEdit,onDelete}){
       h("div",{style:S.detailId},packet.id),
       h("div",{style:S.detailNome},packet.nome||h("em",{style:{color:"#ccc"}},"Sem nome")),
       h("div",{style:S.fieldsGrid},fields.map(([k,v])=>v?h("div",{key:k,style:S.fieldItem},h("div",{style:S.fieldKey},k),h("div",{style:S.fieldVal},v)):null)),
+      packet.observacoes&&h("div",{style:{background:"#FFFDE7",borderRadius:10,padding:"10px 14px",marginTop:10}},
+        h("div",{style:{fontSize:9,textTransform:"uppercase",letterSpacing:1,color:"#BCAAA4",marginBottom:5,fontWeight:700}},"Observações"),
+        h("div",{style:{fontSize:13,color:"#5D4037",lineHeight:1.6,whiteSpace:"pre-wrap"}},packet.observacoes)
+      ),
       h("div",{style:S.detailActions},
         h("button",{style:S.editBtn,onClick:onEdit},"✏️ Editar"),
         !confirmDel
